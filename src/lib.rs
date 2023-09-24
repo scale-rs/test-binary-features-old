@@ -11,14 +11,14 @@ use indicators::{BinaryCrateName, ExitStatusWrapped, GroupEnd, SequenceEnd, Spaw
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
-use std::path::PathBuf;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Output};
 use std::thread;
-use test_binary::TestBinary;
 
+mod group;
 mod indicators;
 #[cfg(test)]
 mod lib_test;
+mod task;
 
 const INTERMEDIARY_DIR: &'static str = "testbins";
 
@@ -29,52 +29,6 @@ const BUFFER_SIZE: usize = 16 * 4096;
 
 /// How long to sleep before checking again whether any child process(es) finished.
 const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(50);
-
-fn manifest_path_for_subdir<S>(parent_dir: &S, sub_dir: &S) -> PathBuf
-where
-    S: Borrow<str> + ?Sized,
-{
-    PathBuf::from_iter([parent_dir.borrow(), sub_dir.borrow(), "Cargo.toml"])
-}
-
-fn spawn<'s, 'b, S, B>(
-    parent_dir: &S,
-    sub_dir: &S,
-    binary_crate: &BinaryCrateName<'b, B>,
-    features: impl IntoIterator<Item = &'s S>,
-) -> DynErrResult<Child>
-where
-    S: Borrow<str> + 's + ?Sized,
-    B: 'b + ?Sized,
-    &'b B: Borrow<str>,
-{
-    let manifest_path = manifest_path_for_subdir(parent_dir, sub_dir);
-    let binary_crate = binary_crate.borrow();
-    let mut binary = TestBinary::relative_to_parent(binary_crate, &manifest_path);
-    binary.with_profile("dev");
-    for feature in features {
-        binary.with_feature(feature.borrow());
-    }
-    // @TODO DOC if we don't paralellize the tested feature combinations fully, then apply
-    // .with_feature(...) once per feature; re-build in the same folder (per the same
-    // channel/sequence of run, but stop on the first error (or warning), unless configured
-    // otherwise.
-    match binary.build() {
-        Ok(path) => {
-            let mut command = Command::new(path);
-            command.stdout(Stdio::piped());
-            command.stderr(Stdio::piped());
-            //command.env("RUST_TEST_TIME_INTEGRATION", "3600000");
-            println!(
-                "Starting a process under {}/ binary crate {}.",
-                sub_dir.borrow(),
-                binary_crate
-            );
-            return Ok(command.spawn()?);
-        }
-        Err(e) => Err(Box::new(e)),
-    }
-}
 
 /// Result of [Child]'s `id()` method. NOT a (transparent) single item struct, because we don't use
 /// [u32] for anything else here.
@@ -87,27 +41,6 @@ type ChildId = u32;
 ///
 /// We could use [Vec], but child processes get removed incrementally => O(n^2).
 type GroupOfChildren = HashMap<ChildId, Child>;
-
-/// Iterate over the given children max. once. Take the first finished child (if any), and return
-/// its process ID and exit status.
-///
-/// The [ChildId] is child process ID of the finished process.
-///
-/// Beware: [Ok] of [Some] CAN contain [ExitStatus] _NOT_ being OK!
-fn finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<ChildId>> {
-    for (child_id, child) in children.iter_mut() {
-        let opt_status_or_err = child.try_wait();
-
-        match opt_status_or_err {
-            Ok(Some(_exit_status)) => {
-                return Ok(Some(child.id()));
-            }
-            Ok(None) => {}
-            Err(err) => return Err(Box::new(err)),
-        }
-    }
-    Ok(None)
-}
 
 type DynErr = Box<dyn Error>;
 type DynErrResult<T> = Result<T, DynErr>;
@@ -229,67 +162,6 @@ pub fn run_parallel_sequences_of_parallel_tasks<
 {
 }
 
-/// Start a number of parallel child process(es) - tasks, all under the same `parent_dir`.
-///
-/// This does NOT have a [SpawningMode] parameter - we behave as if under
-/// [SpawningMode::ProcessAll].
-///
-/// This does NOT check for exit status/stderr of any spawn child processes. It only checks if the
-/// actual spawning itself (system call) was successful. If all spawn successfully, then the
-/// [SpawningMode] of the result tuple is [SpawningMode::ProcessAll]. Otherwise the [SpawningMode]
-/// part of the result tuple is either [SpawningMode::FinishActive] or [SpawningMode::StopAll],
-/// depending on the given `until` ([GroupEnd]).
-fn group_start<
-    's,
-    'b,
-    S,
-    B,
-    #[allow(non_camel_case_types)] FEATURE_SET,
-    #[allow(non_camel_case_types)] PARALLEL_TASKS,
->(
-    parent_dir: &S,
-    tasks: PARALLEL_TASKS,
-    until: GroupEnd,
-) -> (GroupOfChildren, SpawningModeAndOutputs)
-where
-    S: Borrow<str> + 's + ?Sized,
-    B: 'b + ?Sized,
-    &'b B: Borrow<str>,
-    FEATURE_SET: IntoIterator<Item = &'s S /* feature */>,
-    PARALLEL_TASKS: IntoIterator<
-        Item = (
-            &'s S, /* sub_dir */
-            &'b BinaryCrateName<'b, B>,
-            FEATURE_SET,
-        ),
-    >,
-{
-    let mut children = GroupOfChildren::new();
-    let mut mode_and_outputs = SpawningModeAndOutputs::default();
-
-    for (sub_dir, binary_crate, features) in tasks {
-        let child_or_err = spawn(parent_dir, sub_dir, binary_crate, features);
-
-        match child_or_err {
-            Ok(child) => {
-                children.insert(child.id(), child);
-            }
-            Err(err) => {
-                mode_and_outputs = until.same_group_after_output_and_or_error(None, Some(err));
-            }
-        };
-    }
-    (children, mode_and_outputs)
-}
-
-fn group_life_cycle_step(
-    group: GroupOfChildren,
-    mode_and_outputs: SpawningModeAndOutputs,
-    until: GroupEnd,
-) -> (GroupOfChildren, SpawningModeAndOutputs) {
-    panic!()
-}
-
 fn run_sub_dirs<'s, 'b, S, B>(
     parent_dir: &S,
     sub_dirs: impl IntoIterator<Item = &'s S>,
@@ -302,7 +174,7 @@ where
 {
     let mut children = GroupOfChildren::new();
     for sub_dir in sub_dirs {
-        let child_or_err = spawn(parent_dir, &sub_dir, &binary_crate, []);
+        let child_or_err = task::spawn(parent_dir, &sub_dir, &binary_crate, []);
 
         match child_or_err {
             Ok(child) => children.insert(child.id(), child),
@@ -316,7 +188,7 @@ where
     }
 
     loop {
-        let finished_result = finished_child(&mut children);
+        let finished_result = group::finished_child(&mut children);
         match finished_result {
             Ok(Some(child_id)) => {
                 let child = children.remove(&child_id).unwrap();
