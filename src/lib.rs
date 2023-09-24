@@ -19,7 +19,6 @@ use test_binary::TestBinary;
 mod indicators;
 #[cfg(test)]
 mod lib_test;
-mod outputs;
 
 const INTERMEDIARY_DIR: &'static str = "testbins";
 
@@ -95,13 +94,13 @@ type GroupOfChildren = HashMap<ChildId, Child>;
 /// The [ChildId] is child process ID of the finished process.
 ///
 /// Beware: [Ok] of [Some] CAN contain [ExitStatus] _NOT_ being OK!
-fn finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<(ChildId, ExitStatus)>> {
+fn finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<ChildId>> {
     for (child_id, child) in children.iter_mut() {
         let opt_status_or_err = child.try_wait();
 
         match opt_status_or_err {
-            Ok(Some(exit_status)) => {
-                return Ok(Some((*child_id, exit_status)));
+            Ok(Some(_exit_status)) => {
+                return Ok(Some(child.id()));
             }
             Ok(None) => {}
             Err(err) => return Err(Box::new(err)),
@@ -311,28 +310,26 @@ where
     loop {
         let finished_result = finished_child(&mut children);
         match finished_result {
-            Ok(Some((child_id, status))) => {
+            Ok(Some(child_id)) => {
                 let child = children.remove(&child_id).unwrap();
-                let mut stdout = io::stdout().lock();
-                let mut stderr = io::stderr().lock();
+                let output = child.wait_with_output()?;
 
                 // If we have both non-empty stdout and stderr, print stdout first and stderr
                 // second. That way the developer is more likely to notice (and there is less
                 // vertical distance to scroll up).
-                if let Some(mut child_out) = child.stdout {
-                    outputs::copy_all_bytes(&mut stdout, &mut child_out)?;
+                let mut stdout = io::stdout().lock();
+                let mut stderr = io::stderr().lock();
+                stdout.write_all(&output.stdout)?;
+                stderr.write_all(&output.stderr)?;
+                if !output.stderr.is_empty() {
+                    stderr.flush();
                 }
-                let err_len = if let Some(mut child_err) = child.stderr {
-                    outputs::copy_all_bytes(&mut stderr, &mut child_err)?
-                } else {
-                    0
-                };
 
-                if status.success() && err_len == 0 {
+                if output.status.success() && output.stderr.is_empty() {
                     continue;
                 } else {
                     stderr.flush()?;
-                    break Err(Box::new(ExitStatusWrapped::new(status)));
+                    break Err(Box::new(ExitStatusWrapped::new(output.status)));
                 }
             }
             Ok(None) => {
