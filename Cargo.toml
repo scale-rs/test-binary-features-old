@@ -3,11 +3,13 @@ name = "test-binary-features"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.57"
-description = ""
+description = "Programmatic testing of Rust binary crate features"
 license = "MIT"
 repository = "https://github.com/scale-rs/test-binary-features"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+nightly = []
 
 [dependencies]
 test-binary = "3.0.1"
