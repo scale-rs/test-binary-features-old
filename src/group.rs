@@ -1,9 +1,21 @@
-use crate::{
-    BinaryCrateName, ChildId, DynErrResult, GroupEnd, GroupOfChildren, SpawningModeAndOutputs,
-};
-use core::borrow::Borrow;
-
+use crate::indicators::{BinaryCrateName, GroupEnd};
+use crate::output::{DynErrResult, SpawningModeAndOutputs};
 use crate::task;
+use core::borrow::Borrow;
+use std::collections::HashMap;
+use std::process::Child;
+
+/// Result of [Child]'s `id()` method. NOT a (transparent) single item struct, because we don't use
+/// [u32] for anything else here.
+pub type ChildId = u32;
+
+/// NOT [std::collections::HashSet], because that doesn't allow mutable access to items (otherwise
+/// their equality and hash code could change, and HashSet's invariants wouldn't hold true anymore).
+///
+/// Keys are results of [Child]'s `id()` method.
+///
+/// We could use [Vec], but child processes get removed incrementally => O(n^2).
+pub type GroupOfChildren = HashMap<ChildId, Child>;
 
 /// Start a group of parallel child process(es) - tasks, all under the same `parent_dir`.
 ///
@@ -15,7 +27,7 @@ use crate::task;
 /// [SpawningMode] of the result tuple is [SpawningMode::ProcessAll]. Otherwise the [SpawningMode]
 /// part of the result tuple is either [SpawningMode::FinishActive] or [SpawningMode::StopAll],
 /// depending on the given `until` ([GroupEnd]).
-fn start<
+pub fn start<
     's,
     'b,
     S,
@@ -79,7 +91,7 @@ pub fn finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<Chi
     Ok(None)
 }
 
-pub fn group_life_cycle_step(
+pub fn life_cycle_step(
     group: GroupOfChildren,
     mode_and_outputs: SpawningModeAndOutputs,
     until: GroupEnd,

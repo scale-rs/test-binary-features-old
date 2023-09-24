@@ -1,4 +1,4 @@
-use crate::{DynErrOption, OutputOption, SpawningModeAndOutputs};
+use crate::output::{self, DynErrOption, OutputOption, SpawningModeAndOutputs};
 use core::borrow::Borrow;
 use std::process::ExitStatus;
 
@@ -74,7 +74,7 @@ impl GroupEnd {
         output: OutputOption,
         error: DynErrOption,
     ) -> SpawningModeAndOutputs {
-        return if crate::has_error(&output, &error) {
+        return if output::has_error(&output, &error) {
             SpawningModeAndOutputs {
                 mode: self.mode_after_error_in_same_group(),
                 outputs: vec![(output, error)],

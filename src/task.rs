@@ -1,4 +1,5 @@
-use crate::{BinaryCrateName, DynErrResult};
+use crate::indicators::BinaryCrateName;
+use crate::output::DynErrResult;
 use core::borrow::Borrow;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
