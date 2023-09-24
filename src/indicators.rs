@@ -1,6 +1,6 @@
-use crate::{DynErr, SpawningModeAndOutputs};
+use crate::{DynErrOption, OutputOption, SpawningModeAndOutputs};
 use core::borrow::Borrow;
-use std::process::{ExitStatus, Output};
+use std::process::ExitStatus;
 
 #[repr(transparent)]
 #[derive(thiserror::Error, Debug)]
@@ -71,8 +71,8 @@ impl GroupEnd {
     /// after an error.
     pub fn same_group_after_output_and_or_error(
         &self,
-        output: Option<Output>,
-        error: Option<DynErr>,
+        output: OutputOption,
+        error: DynErrOption,
     ) -> SpawningModeAndOutputs {
         return if crate::has_error(&output, &error) {
             SpawningModeAndOutputs {

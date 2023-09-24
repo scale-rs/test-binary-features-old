@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, ExitStatus, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::thread;
 use test_binary::TestBinary;
 
@@ -37,7 +37,7 @@ where
     PathBuf::from_iter([parent_dir.borrow(), sub_dir.borrow(), "Cargo.toml"])
 }
 
-fn spawn_main_under_subdir<'s, 'b, S, B>(
+fn spawn<'s, 'b, S, B>(
     parent_dir: &S,
     sub_dir: &S,
     binary_crate: &BinaryCrateName<'b, B>,
@@ -135,8 +135,8 @@ pub struct SpawningModeAndOutputs {
 impl SpawningModeAndOutputs {
     pub fn group_after_output_and_or_error(
         mut self,
-        output: Option<Output>,
-        error: Option<DynErr>,
+        output: OutputOption,
+        error: DynErrOption,
         group_until: &GroupEnd,
     ) -> Self {
         let has_new_error = has_error(&output, &error);
@@ -259,7 +259,7 @@ where
 {
     let mut children = GroupOfChildren::new();
     for (sub_dir, binary_crate, features) in tasks {
-        let child_or_err = spawn_main_under_subdir(parent_dir, sub_dir, binary_crate, features);
+        let child_or_err = spawn(parent_dir, sub_dir, binary_crate, features);
 
         match child_or_err {
             Ok(child) => children.insert(child.id(), child),
@@ -294,7 +294,7 @@ where
 {
     let mut children = GroupOfChildren::new();
     for sub_dir in sub_dirs {
-        let child_or_err = spawn_main_under_subdir(parent_dir, &sub_dir, &binary_crate, []);
+        let child_or_err = spawn(parent_dir, &sub_dir, &binary_crate, []);
 
         match child_or_err {
             Ok(child) => children.insert(child.id(), child),
@@ -322,7 +322,7 @@ where
                 stdout.write_all(&output.stdout)?;
                 stderr.write_all(&output.stderr)?;
                 if !output.stderr.is_empty() {
-                    stderr.flush();
+                    stderr.flush()?;
                 }
 
                 if output.status.success() && output.stderr.is_empty() {
