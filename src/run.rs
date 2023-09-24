@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use std::thread;
 
 /// How long to sleep before checking again whether any child process(es) finished.
-const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(50);
+const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(10);
 
 /// Run a group of parallel binary crate invocations. Each item (a tuple) of the group consists of
 /// two fields:
@@ -17,7 +17,7 @@ const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(50);
 ///
 /// All entries are run in parallel. It's an error if two or more entries have the same subdirectory
 /// name.
-pub fn run_parallel_single_tasks<'s, S, FEATURES, TASKS>(
+pub fn parallel_single_tasks<'s, S, FEATURES, TASKS>(
     parent_dir: &S,
     tasks: TASKS,
     group_until: GroupEnd,
@@ -28,32 +28,10 @@ pub fn run_parallel_single_tasks<'s, S, FEATURES, TASKS>(
 {
 }
 
-/// Run a sequence of the same binary crate (under the same sub dir) invocation(s), but each
-/// invocation with possibly different combinations of crate features.
-///
-/// The tasks are run in sequence, but their output may be reordered, to have any non-empty `stderr`
-/// at the end.
-pub fn run_sequence_single_tasks<
-    's,
-    S,
-    #[allow(non_camel_case_types)] FEATURE_SET,
-    #[allow(non_camel_case_types)] FEATURE_SETS,
->(
-    parent_dir: &S,
-    sub_dir: &S,
-    feature_sets: FEATURE_SETS,
-    group_until: GroupEnd,
-) where
-    S: Borrow<str> + 's + ?Sized,
-    FEATURE_SET: IntoIterator<Item = &'s S>,
-    FEATURE_SETS: IntoIterator<Item = FEATURE_SET>,
-{
-}
-
 /// Run multiple sequences, where each sequence step runs a group of task(s) in parallel.
 ///
 /// Their output may be reordered, to have any non-empty `stderr` at the end.
-pub fn run_parallel_sequences_of_parallel_tasks<
+pub fn parallel_sequences_of_parallel_tasks<
     's,
     S,
     #[allow(non_camel_case_types)] FEATURE_SET,
@@ -76,29 +54,20 @@ pub fn run_sub_dirs<'s, 'b, S, B>(
     parent_dir: &S,
     sub_dirs: impl IntoIterator<Item = &'s S>,
     binary_crate: BinaryCrateName<'b, B>,
+    until: &GroupEnd,
 ) -> DynErrResult<()>
 where
     S: Borrow<str> + 's + ?Sized,
     B: 'b + ?Sized,
     &'b B: Borrow<str>,
 {
-    let mut children = GroupOfChildren::new();
-    for sub_dir in sub_dirs {
-        let child_or_err = task::spawn(parent_dir, &sub_dir, &binary_crate, []);
-
-        match child_or_err {
-            Ok(child) => children.insert(child.id(), child),
-            Err(err) => {
-                for (_, mut other_child) in children {
-                    let _ = other_child.kill();
-                }
-                return Err(err);
-            }
-        };
-    }
+    let tasks = sub_dirs
+        .into_iter()
+        .map(|sub_dir| (sub_dir, &BinaryCrateName::Main, []));
+    let (mut children, mut mode_and_outpus) = group::start(parent_dir, tasks, until);
 
     loop {
-        let finished_result = group::finished_child(&mut children);
+        let finished_result = group::try_finished_child(&mut children);
         match finished_result {
             Ok(Some(child_id)) => {
                 let child = children.remove(&child_id).unwrap();
@@ -107,18 +76,21 @@ where
                 // If we have both non-empty stdout and stderr, print stdout first and stderr
                 // second. That way the developer is more likely to notice (and there is less
                 // vertical distance to scroll up).
-                let mut stdout = io::stdout().lock();
-                let mut stderr = io::stderr().lock();
-                stdout.write_all(&output.stdout)?;
-                stderr.write_all(&output.stderr)?;
-                if !output.stderr.is_empty() {
-                    stderr.flush()?;
+                {
+                    let mut stdout = io::stdout().lock();
+                    stdout.write_all(&output.stdout)?;
+                }
+                {
+                    let mut stderr = io::stderr().lock();
+                    stderr.write_all(&output.stderr)?;
+                    if !output.stderr.is_empty() {
+                        stderr.flush()?;
+                    }
                 }
 
                 if output.status.success() && output.stderr.is_empty() {
                     continue;
                 } else {
-                    stderr.flush()?;
                     break Err(Box::new(ExitStatusWrapped::new(output.status)));
                 }
             }

@@ -1,4 +1,4 @@
-//#![cfg_attr(feature = "nightly", feature(can_vector, read_buf, write_all_vectored))]
+//#![cfg_attr(nightly, feature(lazy_type_alias))]
 //! Any `S` generic parameter is for [String]/[str] slice-like type, used for accepting names of
 //! directories, files/binary crates, features...
 //!
@@ -6,6 +6,7 @@
 //! lifetimes and borrowing.
 
 mod group;
+mod group_of_sequences_of_groups;
 mod indicators;
 #[cfg(test)]
 mod lib_test;
@@ -13,4 +14,5 @@ mod output;
 #[cfg(test)]
 mod output_test;
 mod run;
+mod sequence_of_groups;
 mod task;

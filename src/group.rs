@@ -9,13 +9,59 @@ use std::process::Child;
 /// [u32] for anything else here.
 pub type ChildId = u32;
 
-/// NOT [std::collections::HashSet], because that doesn't allow mutable access to items (otherwise
-/// their equality and hash code could change, and HashSet's invariants wouldn't hold true anymore).
+/// Group of active (running) Child processes.
+///
+/// NOT [std::collections::HashSet], because that makes referencing the items less efficient.
 ///
 /// Keys are results of [Child]'s `id()` method.
-///
-/// We could use [Vec], but child processes get removed incrementally => O(n^2).
 pub type GroupOfChildren = HashMap<ChildId, Child>;
+
+// @TODO consider generic types:
+// TASKS<S> = ... &dyn Iterator<...>
+//
+// --- if references, then we do NOT need Box<&dyn ...>, just &dyn ...
+/// S: Borrow<str> + 's + ?Sized
+//pub type FeatureSet<'s, S> = IntoIterator<Item = /*&(dyn S + 's)*/&'s dyn S>;
+
+pub type FeatureSet<'s, S, INTO> //where S: ?Sized,
+    = dyn IntoIterator<Item = &'s S /* feature */, IntoIter = INTO>;
+
+pub type ParallelTasks<'s, 'b, S, B, #[allow(non_camel_case_types)] FEATURE_SET, INTO> =
+    dyn IntoIterator<
+        Item = (
+            &'s S, /* subdir */
+            &'b BinaryCrateName<'b, B>,
+            FEATURE_SET,
+        ),
+        IntoIter = INTO,
+    >;
+
+#[repr(transparent)]
+pub struct WrapperWithStringyBound<'s, T, S>
+where
+    S: Borrow<str> + 's + ?Sized,
+{
+    wrapped: T,
+    _phantom: std::marker::PhantomData<&'s S>,
+}
+
+pub fn parallel_tasks<
+    's,
+    'b,
+    S,
+    B,
+    #[allow(non_camel_case_types)] FEATURE_SET_INTO,
+    #[allow(non_camel_case_types)] PARALLEL_TASKS_INTO,
+>(
+    parent_dir: &S,
+    tasks: &ParallelTasks<'s, 'b, S, B, FeatureSet<'s, S, FEATURE_SET_INTO>, PARALLEL_TASKS_INTO>,
+    until: GroupEnd,
+) where
+    S: Borrow<str> + 's + ?Sized,
+    B: 'b + ?Sized,
+    &'b B: Borrow<str>,
+{
+}
 
 /// Start a group of parallel child process(es) - tasks, all under the same `parent_dir`.
 ///
@@ -37,7 +83,7 @@ pub fn start<
 >(
     parent_dir: &S,
     tasks: PARALLEL_TASKS,
-    until: GroupEnd,
+    until: &GroupEnd,
 ) -> (GroupOfChildren, SpawningModeAndOutputs)
 where
     S: Borrow<str> + 's + ?Sized,
@@ -76,13 +122,13 @@ where
 /// The [ChildId] is child process ID of the finished process.
 ///
 /// Beware: [Ok] of [Some] CAN contain [ExitStatus] _NOT_ being OK!
-pub fn finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<ChildId>> {
+pub fn try_finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<ChildId>> {
     for (child_id, child) in children.iter_mut() {
         let opt_status_or_err = child.try_wait();
 
         match opt_status_or_err {
             Ok(Some(_exit_status)) => {
-                return Ok(Some(child.id()));
+                return Ok(Some(*child_id));
             }
             Ok(None) => {}
             Err(err) => return Err(Box::new(err)),
