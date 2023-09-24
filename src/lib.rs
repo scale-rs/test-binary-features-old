@@ -131,7 +131,14 @@ pub struct SpawningModeAndOutputs {
     pub mode: SpawningMode,
     pub outputs: Vec<OutputAndOrError>,
 }
-
+impl Default for SpawningModeAndOutputs {
+    fn default() -> Self {
+        Self {
+            mode: SpawningMode::ProcessAll,
+            outputs: Vec::with_capacity(0),
+        }
+    }
+}
 impl SpawningModeAndOutputs {
     pub fn group_after_output_and_or_error(
         mut self,
@@ -231,7 +238,7 @@ pub fn run_parallel_sequences_of_parallel_tasks<
 /// actual spawning itself (system call) was successful. If all spawn successfully, then the
 /// [SpawningMode] of the result tuple is [SpawningMode::ProcessAll]. Otherwise the [SpawningMode]
 /// part of the result tuple is either [SpawningMode::FinishActive] or [SpawningMode::StopAll],
-/// depending on the given `until` ([ExecutionEnd]).
+/// depending on the given `until` ([GroupEnd]).
 fn group_start<
     's,
     'b,
@@ -243,7 +250,7 @@ fn group_start<
     parent_dir: &S,
     tasks: PARALLEL_TASKS,
     until: GroupEnd,
-) -> DynErrResult<(GroupOfChildren, SpawningModeAndOutputs)>
+) -> (GroupOfChildren, SpawningModeAndOutputs)
 where
     S: Borrow<str> + 's + ?Sized,
     B: 'b + ?Sized,
@@ -258,25 +265,26 @@ where
     >,
 {
     let mut children = GroupOfChildren::new();
+    let mut mode_and_outputs = SpawningModeAndOutputs::default();
+
     for (sub_dir, binary_crate, features) in tasks {
         let child_or_err = spawn(parent_dir, sub_dir, binary_crate, features);
 
         match child_or_err {
-            Ok(child) => children.insert(child.id(), child),
+            Ok(child) => {
+                children.insert(child.id(), child);
+            }
             Err(err) => {
-                for (_, mut other_child) in children {
-                    let _ = other_child.kill();
-                }
-                return Err(err);
+                mode_and_outputs = until.same_group_after_output_and_or_error(None, Some(err));
             }
         };
     }
-    panic!()
+    (children, mode_and_outputs)
 }
 
 fn group_life_cycle_step(
     group: GroupOfChildren,
-    mode: SpawningModeAndOutputs,
+    mode_and_outputs: SpawningModeAndOutputs,
     until: GroupEnd,
 ) -> (GroupOfChildren, SpawningModeAndOutputs) {
     panic!()
