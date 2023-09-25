@@ -16,13 +16,6 @@ pub type ChildId = u32;
 /// Keys are results of [Child]'s `id()` method.
 pub type GroupOfChildren = HashMap<ChildId, Child>;
 
-// @TODO consider generic types:
-// TASKS<S> = ... &dyn Iterator<...>
-//
-// --- if references, then we do NOT need Box<&dyn ...>, just &dyn ...
-/// S: Borrow<str> + 's + ?Sized
-//pub type FeatureSet<'s, S> = IntoIterator<Item = /*&(dyn S + 's)*/&'s dyn S>;
-
 pub type FeatureSetWithInto<'s, S, INTO> //where S: ?Sized,
     = dyn IntoIterator<Item = &'s S /* feature */, IntoIter = INTO>;
 
@@ -48,16 +41,205 @@ pub type ParallelTasksNoIntoButFeaturesetGeneric<
 >;
 //-----
 
-pub type FeaturesIter<'a, S> //where S: ?Sized,
+pub type FeaturesIterDyn<'a, S> //where S: ?Sized,
     = &'a mut dyn Iterator<Item = &'a S /* feature */>;
 
-pub type GroupParallelTasksIter<'a, S> = &'a mut dyn Iterator<
+pub type GroupParallelTasksIterDyn<'a, S> = &'a mut dyn Iterator<
     Item = (
         &'a S, /* subdir */
         &'a BinaryCrateName<'a, S>,
-        FeaturesIter<'a, S>,
+        FeaturesIterDyn<'a, S>,
     ),
 >;
+//-----
+
+struct T {}
+impl<F> From<F> for T
+where
+    F: Iterator<Item = char>,
+{
+    fn from(value: F) -> Self {
+        Self {}
+    }
+}
+
+fn transform() {
+    if true {
+        let t: T = ['x'; 1].iter().cloned().into();
+
+        //let t = (Box::new(['x'; 1].iter().cloned()) as Box<Into<T>>).into();
+    }
+}
+//-----
+
+#[repr(transparent)]
+pub struct FeaturesGEN<'a, S, #[allow(non_camel_case_types)] FEATURES>
+where
+    S: Borrow<str> + 'a + ?Sized,
+    FEATURES: Iterator<Item = &'a S>,
+{
+    features: FEATURES,
+}
+impl<'a, S, #[allow(non_camel_case_types)] FEATURES> From<FEATURES> for FeaturesGEN<'a, S, FEATURES>
+where
+    S: Borrow<str> + 'a + ?Sized,
+    FEATURES: Iterator<Item = &'a S>,
+{
+    fn from(features: FEATURES) -> Self {
+        Self { features }
+    }
+}
+
+#[repr(transparent)]
+pub struct Features<'a, S>
+where
+    S: Borrow<str> + 'a + ?Sized,
+{
+    features: Box<dyn Iterator<Item = &'a S> + 'a>,
+}
+impl<'a, S, FEATURES> From<FEATURES> for Features<'a, S>
+where
+    S: Borrow<str> + 'a + ?Sized,
+    FEATURES: Iterator<Item = &'a S> + 'a,
+{
+    fn from(features: FEATURES) -> Self {
+        Self {
+            features: Box::new(features),
+        }
+    }
+}
+
+#[repr(transparent)]
+pub struct GroupParallelTasks<'a, S>
+where
+    S: Borrow<str> + 'a + ?Sized, // for Features
+    &'a S: Borrow<str>,           // for BinaryCrateName
+{
+    group_tasks: Box<
+        dyn Iterator<
+                Item = (
+                    &'a S, /* sub_dir */
+                    &'a BinaryCrateName<'a, S>,
+                    Features<'a, S>,
+                ),
+            > + 'a,
+    >,
+}
+impl<'a, S, TASKS> From<TASKS> for GroupParallelTasks<'a, S>
+where
+    S: Borrow<str> + 'a + ?Sized, // for FeatureSet
+    &'a S: Borrow<str>,           // for BinaryCrateName
+    TASKS: Iterator<
+            Item = (
+                &'a S, /* sub_dir */
+                &'a BinaryCrateName<'a, S>,
+                Features<'a, S>,
+            ),
+        > + 'a,
+{
+    fn from(group_tasks: TASKS) -> Self {
+        Self {
+            group_tasks: Box::new(group_tasks),
+        }
+    }
+}
+/*trait Tr<T> {}
+struct St {}
+impl Tr<u32> for St {}
+impl Tr<u8> for St {}*/
+#[cfg(NOT_POSSIBLE)]
+impl<'a, S, FEATURES, TASKS> From<TASKS> for GroupParallelTasks<'a, S>
+where
+    S: Borrow<str> + 'a + ?Sized, // for FeatureSet
+    &'a S: Borrow<str>,           // for BinaryCrateName
+    FEATURES: Iterator<Item = &'a S> + 'a,
+    TASKS: Iterator<
+            Item = (
+                &'a S, /* sub_dir */
+                &'a BinaryCrateName<'a, S>,
+                FEATURES,
+            ),
+        > + 'a,
+{
+    fn from(group_tasks: TASKS) -> Self {
+        let group_tasks = group_tasks.map(|(sub_dir, binary_crate_name, features)| {
+            (sub_dir, binary_crate_name, features.into())
+        });
+        let group_tasks = Box::new(group_tasks);
+        Self { group_tasks }
+    }
+}
+
+#[repr(transparent)]
+pub struct GroupParallelTasksGEN<'a, S, FEATURES, TASKS>
+where
+    S: Borrow<str> + 'a + ?Sized, // for Features
+    &'a S: Borrow<str>,           // for BinaryCrateName
+    FEATURES: Iterator<Item = &'a S>,
+    TASKS: Iterator<
+        Item = (
+            &'a S, /* sub_dir */
+            &'a BinaryCrateName<'a, S>,
+            FeaturesGEN<'a, S, FEATURES>,
+        ),
+    >,
+{
+    group_tasks: TASKS,
+}
+impl<'a, S, FEATURES, TASKS> From<TASKS> for GroupParallelTasksGEN<'a, S, FEATURES, TASKS>
+where
+    S: Borrow<str> + 'a + ?Sized, // for FeatureSet
+    &'a S: Borrow<str>,           // for BinaryCrateName
+    FEATURES: Iterator<Item = &'a S>,
+    TASKS: Iterator<
+        Item = (
+            &'a S, /* sub_dir */
+            &'a BinaryCrateName<'a, S>,
+            FeaturesGEN<'a, S, FEATURES>,
+        ),
+    >,
+{
+    fn from(group_tasks: TASKS) -> Self {
+        Self { group_tasks }
+    }
+}
+
+impl<'a, S, FEATURES, TASKS> GroupParallelTasksGEN<'a, S, FEATURES, TASKS>
+where
+    S: Borrow<str> + 'a + ?Sized, // for FeatureSet
+    &'a S: Borrow<str>,           // for BinaryCrateName
+    FEATURES: Iterator<Item = &'a S>,
+    TASKS: Iterator<
+        Item = (
+            &'a S, /* sub_dir */
+            &'a BinaryCrateName<'a, S>,
+            FeaturesGEN<'a, S, FEATURES>,
+        ),
+    >,
+{
+    pub fn start(
+        mut self,
+        parent_dir: &'a S,
+        until: &'a GroupEnd,
+    ) -> (GroupOfChildren, SpawningModeAndOutputs) {
+        let mut children = GroupOfChildren::new();
+        let mut mode_and_outputs = SpawningModeAndOutputs::default();
+
+        for (sub_dir, binary_crate, features) in self.group_tasks {
+            let child_or_err = task::spawn(parent_dir, sub_dir, binary_crate, features.features);
+
+            match child_or_err {
+                Ok(child) => {
+                    children.insert(child.id(), child);
+                }
+                Err(err) => {
+                    mode_and_outputs = until.same_group_after_output_and_or_error(None, Some(err));
+                }
+            };
+        }
+        (children, mode_and_outputs)
+    }
+}
 
 /// Start a group of parallel child process(es) - tasks, all under the same `parent_dir`.
 ///
@@ -72,7 +254,7 @@ pub type GroupParallelTasksIter<'a, S> = &'a mut dyn Iterator<
 /// depending on the given `until` ([GroupEnd]).
 pub fn parallel_tasks<'a, S>(
     parent_dir: &'a S,
-    tasks: GroupParallelTasksIter<'a, S>,
+    tasks: GroupParallelTasksIterDyn<'a, S>,
     until: &'a GroupEnd,
 ) -> (GroupOfChildren, SpawningModeAndOutputs)
 where
@@ -98,26 +280,23 @@ where
 }
 
 pub fn parallel_tasks_OLD<
-    's,
-    'b,
+    'a,
     S,
-    B,
     #[allow(non_camel_case_types)] FEATURE_SET,
     #[allow(non_camel_case_types)] PARALLEL_TASKS,
 >(
-    parent_dir: &S,
+    parent_dir: &'a S,
     tasks: PARALLEL_TASKS,
     until: &GroupEnd,
 ) -> (GroupOfChildren, SpawningModeAndOutputs)
 where
-    S: Borrow<str> + 's + ?Sized, // for FeatureSet
-    B: 'b + ?Sized,
-    &'b B: Borrow<str>, // for BinaryCrateName
-    FEATURE_SET: IntoIterator<Item = &'s S /* feature */>,
+    S: Borrow<str> + 'a + ?Sized, // for FeatureSet
+    &'a S: Borrow<str>,           // for BinaryCrateName
+    FEATURE_SET: IntoIterator<Item = &'a S /* feature */>,
     PARALLEL_TASKS: IntoIterator<
         Item = (
-            &'s S, /* sub_dir */
-            &'b BinaryCrateName<'b, B>,
+            &'a S, /* sub_dir */
+            &'a BinaryCrateName<'a, S>,
             FEATURE_SET,
         ),
     >,

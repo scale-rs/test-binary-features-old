@@ -28,7 +28,7 @@ pub fn spawnNoImplNoInto<'s, 'b, S, B>(
     parent_dir: &S,
     sub_dir: &S,
     binary_crate: &BinaryCrateName<'b, B>,
-    features: &mut crate::group::FeaturesIter<'s, S>,
+    features: &mut crate::group::FeaturesIterDyn<'s, S>,
 ) where
     S: Borrow<str> + 's + ?Sized,
     B: 'b + ?Sized,

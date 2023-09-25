@@ -1,4 +1,4 @@
-use crate::group::{self, FeaturesIter, GroupOfChildren};
+use crate::group::{self, FeaturesIterDyn, GroupOfChildren};
 use crate::indicators::{BinaryCrateName, ExitStatusWrapped, GroupEnd, SequenceEnd};
 use crate::output::DynErrResult;
 use crate::task;
@@ -50,18 +50,11 @@ pub fn parallel_sequences_of_parallel_tasks<
 {
 }
 
-pub fn consume_tasks<'a, S>(tasks: crate::group::GroupParallelTasksIter<'a, S>)
-where
-    S: Borrow<str> + 'a + ?Sized,
-    &'a S: Borrow<str>,
-{
-}
-
 pub fn run_sub_dirs<'a, S>(
     parent_dir: &'a S,
-    sub_dirs_and_features: impl Iterator<Item = (&'a S /*sub_dir*/, FeaturesIter<'a, S>)> + 'a,
+    sub_dirs_and_features: impl Iterator<Item = (&'a S /*sub_dir*/, FeaturesIterDyn<'a, S>)> + 'a,
     _sub_dirs_and_features_dyn: &'a mut dyn Iterator<
-        Item = (&'a S /*sub_dir*/, FeaturesIter<'a, S>),
+        Item = (&'a S /*sub_dir*/, FeaturesIterDyn<'a, S>),
     >,
     binary_crate: &'a BinaryCrateName<'a, S>,
     //binary_crate: BinaryCrateName<'a, S>,
@@ -83,7 +76,8 @@ where
     //consume_tasks(&mut tasks);
     //consume_tasks(&mut tasks);
 
-    let (mut children, mut mode_and_outputs) = group::parallel_tasks(parent_dir, &mut tasks, until);
+    //let (mut children, mut _mode_and_outputs) = group::parallel_tasks(parent_dir, &mut tasks, until);
+    let mut children = GroupOfChildren::new();
     loop {
         let finished_result = group::try_finished_child(&mut children);
         match finished_result {
