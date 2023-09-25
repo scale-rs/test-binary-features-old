@@ -12,6 +12,31 @@ where
     PathBuf::from_iter([parent_dir.borrow(), sub_dir.borrow(), "Cargo.toml"])
 }
 
+pub fn spawnNoImplIntoIter<'s, 'b, S, B, #[allow(non_camel_case_types)] FEATURES_INTO>(
+    parent_dir: &S,
+    sub_dir: &S,
+    binary_crate: &BinaryCrateName<'b, B>,
+    features: &crate::group::FeatureSetWithInto<'s, S, FEATURES_INTO>,
+) where
+    S: Borrow<str> + 's + ?Sized,
+    B: 'b + ?Sized,
+    &'b B: Borrow<str>,
+{
+}
+
+pub fn spawnNoImplNoInto<'s, 'b, S, B>(
+    parent_dir: &S,
+    sub_dir: &S,
+    binary_crate: &BinaryCrateName<'b, B>,
+    features: &mut crate::group::FeaturesIter<'s, S>,
+) where
+    S: Borrow<str> + 's + ?Sized,
+    B: 'b + ?Sized,
+    &'b B: Borrow<str>,
+{
+    for feature in features {}
+}
+
 pub fn spawn<'s, 'b, S, B>(
     parent_dir: &S,
     sub_dir: &S,

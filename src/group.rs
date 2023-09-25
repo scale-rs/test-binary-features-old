@@ -23,57 +23,81 @@ pub type GroupOfChildren = HashMap<ChildId, Child>;
 /// S: Borrow<str> + 's + ?Sized
 //pub type FeatureSet<'s, S> = IntoIterator<Item = /*&(dyn S + 's)*/&'s dyn S>;
 
-pub type FeatureSet<'s, S, INTO> //where S: ?Sized,
+pub type FeatureSetWithInto<'s, S, INTO> //where S: ?Sized,
     = dyn IntoIterator<Item = &'s S /* feature */, IntoIter = INTO>;
 
-pub type ParallelTasks<'s, 'b, S, B, #[allow(non_camel_case_types)] FEATURE_SET, INTO> =
+pub type GroupParallelTasksWithInto<'s, S, #[allow(non_camel_case_types)] FEATURE_SET, INTO> =
     dyn IntoIterator<
         Item = (
             &'s S, /* subdir */
-            &'b BinaryCrateName<'b, B>,
+            &'s BinaryCrateName<'s, S>,
             FEATURE_SET,
         ),
         IntoIter = INTO,
     >;
-
-#[repr(transparent)]
-pub struct WrapperWithStringyBound<'s, T, S>
-where
-    S: Borrow<str> + 's + ?Sized,
-{
-    wrapped: T,
-    _phantom: std::marker::PhantomData<&'s S>,
-}
-
-pub fn parallel_tasks<
+pub type ParallelTasksNoIntoButFeaturesetGeneric<
     's,
-    'b,
     S,
-    B,
-    #[allow(non_camel_case_types)] FEATURE_SET_INTO,
-    #[allow(non_camel_case_types)] PARALLEL_TASKS_INTO,
->(
-    parent_dir: &S,
-    tasks: &ParallelTasks<'s, 'b, S, B, FeatureSet<'s, S, FEATURE_SET_INTO>, PARALLEL_TASKS_INTO>,
-    until: GroupEnd,
-) where
-    S: Borrow<str> + 's + ?Sized,
-    B: 'b + ?Sized,
-    &'b B: Borrow<str>,
-{
-}
+    #[allow(non_camel_case_types)] FEATURE_SET,
+> = dyn Iterator<
+    Item = (
+        &'s S, /* subdir */
+        &'s BinaryCrateName<'s, S>,
+        FEATURE_SET,
+    ),
+>;
+//-----
+
+pub type FeaturesIter<'a, S> //where S: ?Sized,
+    = &'a mut dyn Iterator<Item = &'a S /* feature */>;
+
+pub type GroupParallelTasksIter<'a, S> = &'a mut dyn Iterator<
+    Item = (
+        &'a S, /* subdir */
+        &'a BinaryCrateName<'a, S>,
+        FeaturesIter<'a, S>,
+    ),
+>;
 
 /// Start a group of parallel child process(es) - tasks, all under the same `parent_dir`.
 ///
-/// This does NOT have a [SpawningMode] parameter - we behave as if under
-/// [SpawningMode::ProcessAll].
+/// This does NOT have a [crate::indicators::SpawningMode] parameter - we behave as if under
+/// [crate::indicators::SpawningMode::ProcessAll].
 ///
 /// This does NOT check for exit status/stderr of any spawn child processes. It only checks if the
 /// actual spawning itself (system call) was successful. If all spawn successfully, then the
-/// [SpawningMode] of the result tuple is [SpawningMode::ProcessAll]. Otherwise the [SpawningMode]
-/// part of the result tuple is either [SpawningMode::FinishActive] or [SpawningMode::StopAll],
+/// [crate::indicators::SpawningMode] of the result tuple is [SpawningMode::ProcessAll]. Otherwise
+/// the [crate::indicators::SpawningMode] part of the result tuple is either
+/// [crate::indicators::SpawningMode::FinishActive] or [crate::indicators::SpawningMode::StopAll],
 /// depending on the given `until` ([GroupEnd]).
-pub fn start<
+pub fn parallel_tasks<'a, S>(
+    parent_dir: &'a S,
+    tasks: GroupParallelTasksIter<'a, S>,
+    until: &'a GroupEnd,
+) -> (GroupOfChildren, SpawningModeAndOutputs)
+where
+    S: Borrow<str> + 'a + ?Sized,
+    &'a S: Borrow<str>,
+{
+    let mut children = GroupOfChildren::new();
+    let mut mode_and_outputs = SpawningModeAndOutputs::default();
+
+    for (sub_dir, binary_crate, features) in tasks {
+        let child_or_err = task::spawn(parent_dir, sub_dir, binary_crate, features);
+
+        match child_or_err {
+            Ok(child) => {
+                children.insert(child.id(), child);
+            }
+            Err(err) => {
+                mode_and_outputs = until.same_group_after_output_and_or_error(None, Some(err));
+            }
+        };
+    }
+    (children, mode_and_outputs)
+}
+
+pub fn parallel_tasks_OLD<
     's,
     'b,
     S,
@@ -86,9 +110,9 @@ pub fn start<
     until: &GroupEnd,
 ) -> (GroupOfChildren, SpawningModeAndOutputs)
 where
-    S: Borrow<str> + 's + ?Sized,
+    S: Borrow<str> + 's + ?Sized, // for FeatureSet
     B: 'b + ?Sized,
-    &'b B: Borrow<str>,
+    &'b B: Borrow<str>, // for BinaryCrateName
     FEATURE_SET: IntoIterator<Item = &'s S /* feature */>,
     PARALLEL_TASKS: IntoIterator<
         Item = (

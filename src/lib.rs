@@ -1,3 +1,4 @@
+#![allow(unused)]
 //#![cfg_attr(nightly, feature(lazy_type_alias))]
 //! Any `S` generic parameter is for [String]/[str] slice-like type, used for accepting names of
 //! directories, files/binary crates, features...
