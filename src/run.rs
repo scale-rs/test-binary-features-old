@@ -1,14 +1,11 @@
 use crate::group::{self, FeaturesIterDynBox, GroupOfChildren, ParallelTasksIterDyn};
-use crate::indicators::{BinaryCrateName, ExitStatusWrapped, GroupEnd, SequenceEnd};
+use crate::indicators::{BinaryCrateName, GroupEnd, SequenceEnd};
 use crate::output::DynErrResult;
 use crate::task;
 use core::borrow::Borrow;
-use core::time::Duration;
 use std::io::{self, Write};
+use std::process::Output;
 use std::thread;
-
-/// How long to sleep before checking again whether any child process(es) finished.
-const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(10);
 
 /// Run a group of parallel binary crate invocations. Each item (a tuple) of the group consists of
 /// two fields:
@@ -48,65 +45,4 @@ pub fn parallel_sequences_of_parallel_tasks<
     SEQUENCE_TASKS: IntoIterator<Item = PARALLEL_TASKS>,
     SEQUENCES: IntoIterator<Item = (GroupEnd, SequenceEnd, SEQUENCE_TASKS)>,
 {
-}
-
-pub fn run_sub_dirs<'a, S>(
-    parent_dir: &'a S,
-    mut tasks: &mut ParallelTasksIterDyn<'a, S>,
-    sub_dirs_and_features: impl Iterator<Item = (&'a S /*sub_dir*/, FeaturesIterDynBox<'a, S>)> + 'a,
-    _sub_dirs_and_features_dyn: &'a mut dyn Iterator<
-        Item = (&'a S /*sub_dir*/, FeaturesIterDynBox<'a, S>),
-    >,
-    binary_crate: &'a BinaryCrateName<'a, S>,
-    //binary_crate: BinaryCrateName<'a, S>,
-    //features: impl Iterator<Item = &'a S> + Clone + 'a,
-    until: &'a GroupEnd,
-) -> DynErrResult<()>
-where
-    S: Borrow<str> + 'a + ?Sized,
-    &'a S: Borrow<str>,
-{
-    let mut children = GroupOfChildren::new();
-
-    loop {
-        let finished_result = group::try_finished_child(&mut children);
-        match finished_result {
-            Ok(Some(child_id)) => {
-                let child = children.remove(&child_id).unwrap();
-                let output = child.wait_with_output()?;
-
-                // If we have both non-empty stdout and stderr, print stdout first and stderr
-                // second. That way the developer is more likely to notice (and there is less
-                // vertical distance to scroll up).
-                {
-                    let mut stdout = io::stdout().lock();
-                    stdout.write_all(&output.stdout)?;
-                }
-                {
-                    let mut stderr = io::stderr().lock();
-                    stderr.write_all(&output.stderr)?;
-                    if !output.stderr.is_empty() {
-                        stderr.flush()?;
-                    }
-                }
-
-                if output.status.success() && output.stderr.is_empty() {
-                    continue;
-                } else {
-                    break Err(Box::new(ExitStatusWrapped::new(output.status)));
-                }
-            }
-            Ok(None) => {
-                if children.is_empty() {
-                    break Ok(());
-                } else {
-                    thread::sleep(SLEEP_BETWEEN_CHECKING_CHILDREN);
-                    continue;
-                }
-            }
-            Err(err) => {
-                break Err(err);
-            }
-        }
-    }
 }

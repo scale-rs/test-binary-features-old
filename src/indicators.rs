@@ -1,8 +1,8 @@
-use crate::output::{self, DynErrOption, OutputOption, SpawningModeAndOutputs};
+use crate::output::{self, ChildOutputOption, DynErrOption};
 use core::borrow::Borrow;
-use std::process::ExitStatus;
+//use std::process::ExitStatus;
 
-#[repr(transparent)]
+/*#[repr(transparent)]
 #[derive(thiserror::Error, Debug)]
 #[error("status:\n{status}")]
 pub struct ExitStatusWrapped {
@@ -12,7 +12,7 @@ impl ExitStatusWrapped {
     pub fn new(status: ExitStatus) -> Self {
         Self { status: status }
     }
-}
+}*/
 
 pub enum BinaryCrateName<'b, B>
 where
@@ -71,19 +71,13 @@ impl GroupEnd {
     /// after an error.
     pub fn same_group_after_output_and_or_error(
         &self,
-        output: OutputOption,
-        error: DynErrOption,
-    ) -> SpawningModeAndOutputs {
-        return if output::has_error(&output, &error) {
-            SpawningModeAndOutputs {
-                mode: self.mode_after_error_in_same_group(),
-                outputs: vec![(output, error)],
-            }
+        child_output: &ChildOutputOption,
+        error: &DynErrOption,
+    ) -> SpawningMode {
+        return if output::has_error(child_output, error) {
+            self.mode_after_error_in_same_group()
         } else {
-            SpawningModeAndOutputs {
-                mode: SpawningMode::ProcessAll,
-                outputs: vec![(output, error)],
-            }
+            SpawningMode::ProcessAll
         };
     }
 }
@@ -111,6 +105,31 @@ pub enum SpawningMode {
 impl SpawningMode {
     pub fn has_error(&self) -> bool {
         self != &Self::ProcessAll
+    }
+}
+impl Default for SpawningMode {
+    fn default() -> Self {
+        Self::ProcessAll
+    }
+}
+impl SpawningMode {
+    pub fn after_output_and_or_error(
+        self,
+        output: &ChildOutputOption,
+        error: &DynErrOption,
+        group_until: &GroupEnd,
+    ) -> Self {
+        if self.has_error() {
+            debug_assert_eq!(self, group_until.mode_after_error_in_same_group());
+            self
+        } else {
+            if output::has_error(&output, &error) {
+                group_until.mode_after_error_in_same_group()
+            } else {
+                debug_assert_eq!(self, SpawningMode::ProcessAll);
+                self
+            }
+        }
     }
 }
 

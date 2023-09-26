@@ -32,24 +32,33 @@ fn output_failed() -> Output {
 fn has_error() {
     let ok = output_ok();
     let ok_status = ok.status;
-    assert!(!output::has_error(&Some(ok), &None));
+    assert!(!output::has_error(&Some((ok, "ok".to_owned())), &None));
 
     let failed = output_failed();
     let failed_status = failed.status;
-    assert!(output::has_error(&Some(failed), &None));
+    assert!(output::has_error(
+        &Some((failed, "failed".to_owned())),
+        &None
+    ));
 
-    let ok_outputs_but_failed_status = Some(Output {
-        status: failed_status,
-        stdout: vec![1u8],
-        stderr: Vec::with_capacity(0),
-    });
+    let ok_outputs_but_failed_status = Some((
+        Output {
+            status: failed_status,
+            stdout: vec![1u8],
+            stderr: Vec::with_capacity(0),
+        },
+        "ok_outputs_but_failed_status".to_owned(),
+    ));
     assert!(output::has_error(&ok_outputs_but_failed_status, &None));
 
-    let failed_outputs_but_ok_status = Some(Output {
-        status: ok_status,
-        stdout: Vec::with_capacity(0),
-        stderr: vec![1u8],
-    });
+    let failed_outputs_but_ok_status = Some((
+        Output {
+            status: ok_status,
+            stdout: Vec::with_capacity(0),
+            stderr: vec![1u8],
+        },
+        "failed_outputs_but_ok_status".to_owned(),
+    ));
     assert!(output::has_error(&failed_outputs_but_ok_status, &None));
 
     assert!(output::has_error(&None, &Some(Box::new(Err {}))));
