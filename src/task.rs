@@ -16,7 +16,7 @@ pub fn spawnNoImplIntoIter<'s, 'b, S, B, #[allow(non_camel_case_types)] FEATURES
     parent_dir: &S,
     sub_dir: &S,
     binary_crate: &BinaryCrateName<'b, B>,
-    features: &crate::group::FeatureSetWithInto<'s, S, FEATURES_INTO>,
+    //features: &crate::group::FeatureSetWithInto<'s, S, FEATURES_INTO>,
 ) where
     S: Borrow<str> + 's + ?Sized,
     B: 'b + ?Sized,
@@ -28,7 +28,7 @@ pub fn spawnNoImplNoInto<'s, 'b, S, B>(
     parent_dir: &S,
     sub_dir: &S,
     binary_crate: &BinaryCrateName<'b, B>,
-    features: &mut crate::group::FeaturesIterDyn<'s, S>,
+    features: &mut crate::group::FeaturesIterDynBox<'s, S>,
 ) where
     S: Borrow<str> + 's + ?Sized,
     B: 'b + ?Sized,
