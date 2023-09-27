@@ -1,4 +1,4 @@
-use crate::indicators::{BinaryCrateName, GroupEnd};
+use crate::indicators::GroupEnd;
 use core::borrow::Borrow;
 
 /// Run a sequence of the same binary crate (under the same sub dir) invocation(s), but each

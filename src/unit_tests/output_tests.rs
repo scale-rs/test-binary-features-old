@@ -16,7 +16,7 @@ fn output(path: impl AsRef<OsStr>, arg: Option<impl AsRef<OsStr>>) -> Output {
         command.arg(arg);
     }
     let mut child = command.spawn().unwrap();
-    let status = child.wait().unwrap();
+    let _ = child.wait().unwrap();
     child.wait_with_output().unwrap()
 }
 

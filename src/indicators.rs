@@ -1,18 +1,5 @@
 use crate::output::{self, ChildOutputOption, DynErrOption};
 use core::borrow::Borrow;
-//use std::process::ExitStatus;
-
-/*#[repr(transparent)]
-#[derive(thiserror::Error, Debug)]
-#[error("status:\n{status}")]
-pub struct ExitStatusWrapped {
-    status: ExitStatus,
-}
-impl ExitStatusWrapped {
-    pub fn new(status: ExitStatus) -> Self {
-        Self { status: status }
-    }
-}*/
 
 pub enum BinaryCrateName<'b, B>
 where
@@ -67,7 +54,7 @@ impl GroupEnd {
         }
     }
 
-    /// Return a new [SpawningModeAndOutputs] - after the first task (process) termination and/or
+    /// Return a new [SpawningMode] after the first task (process) termination (either successful or errornous) and/or
     /// after an error.
     pub fn same_group_after_output_and_or_error(
         &self,

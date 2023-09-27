@@ -1,5 +1,4 @@
 use crate::group::ChildInfo;
-use crate::indicators::{GroupEnd, SpawningMode};
 use std::error::Error;
 use std::process::Output;
 

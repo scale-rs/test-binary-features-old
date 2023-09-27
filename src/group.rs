@@ -38,25 +38,6 @@ pub type ParallelTasksIterDyn<'a, S> = dyn Iterator<
     > + 'a;
 pub type ParallelTasksIterDynBox<'a, S> = Box<ParallelTasksIterDyn<'a, S>>;
 
-#[cfg(test)]
-/// Compile time-only check that result of [parallel_tasks_from_generic] is compatible with
-/// [start_parallel_tasks].
-fn _parallel_tasks_from_generic_result_is_compatible() {
-    if true {
-        panic!("A compile-time check only.");
-    }
-    let mut tasks = parallel_tasks_from_generic(
-        vec![(
-            "some_dir",
-            &BinaryCrateName::Main,
-            [].into_iter(),
-            "Child description here".to_owned(),
-        )]
-        .into_iter(),
-    );
-    start_parallel_tasks(&mut tasks, "", &GroupEnd::ProcessAll);
-}
-
 /// This does return a generic (`impl`) iterator itself. Then you can store it, and pass a (mutable)
 /// reference to it when calling [start_parallel_tasks].
 pub fn parallel_tasks_from_generic<'a, S, FEATURES, TASKS>(
@@ -106,7 +87,7 @@ pub(crate) type GroupExecutionAndOutputs = (GroupExecution, Vec<OutputAndOrError
 /// the [crate::indicators::SpawningMode] part of the result tuple is either
 /// [crate::indicators::SpawningMode::FinishActive] or [crate::indicators::SpawningMode::StopAll],
 /// depending on the given `until` ([GroupEnd]).
-pub(crate) fn start_parallel_tasks<'a, S>(
+pub fn start_parallel_tasks<'a, S>(
     mut tasks: &mut ParallelTasksIterDyn<'a, S>,
     parent_dir: &'a S,
     until: &'a GroupEnd,
@@ -117,7 +98,7 @@ where
 {
     let mut children = GroupOfChildren::new();
     let mut spawning_mode = SpawningMode::default();
-    let mut outputs = vec![];
+    let outputs = vec![];
 
     for (sub_dir, binary_crate, features, child_info) in &mut tasks {
         let child_or_err = task::spawn(parent_dir, sub_dir, binary_crate, features);
@@ -181,7 +162,7 @@ pub(crate) fn print_output(output: &Output) -> IoResult<()> {
 /// previously).
 #[must_use]
 pub fn life_cycle_step(
-    (mut children, mut spawning_mode): GroupExecution,
+    (mut children, spawning_mode): GroupExecution,
     until: &GroupEnd,
 ) -> DynErrResult<Option<GroupExecutionAndOptOutput>> {
     let finished_result = try_finished_child(&mut children);
@@ -207,8 +188,8 @@ pub fn life_cycle_step(
 
 #[must_use]
 pub fn life_cycle_loop(
-    (mut children, mut spawning_mode): GroupExecution,
-    until: &GroupEnd,
+    (mut _children, mut _spawning_mode): GroupExecution,
+    _until: &GroupEnd,
 ) -> DynErrResult<()> {
     thread::sleep(SLEEP_BETWEEN_CHECKING_CHILDREN);
     panic!()

@@ -1,11 +1,5 @@
-use crate::group::{self, FeaturesIterDynBox, GroupOfChildren, ParallelTasksIterDyn};
-use crate::indicators::{BinaryCrateName, GroupEnd, SequenceEnd};
-use crate::output::DynErrResult;
-use crate::task;
+use crate::indicators::{GroupEnd, SequenceEnd};
 use core::borrow::Borrow;
-use std::io::{self, Write};
-use std::process::Output;
-use std::thread;
 
 /// Run a group of parallel binary crate invocations. Each item (a tuple) of the group consists of
 /// two fields:
