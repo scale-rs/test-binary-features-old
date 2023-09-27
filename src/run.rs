@@ -1,3 +1,4 @@
+#![allow(unused)]
 use crate::indicators::{GroupEnd, SequenceEnd};
 use core::borrow::Borrow;
 

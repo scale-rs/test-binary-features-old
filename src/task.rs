@@ -1,9 +1,9 @@
-use crate::group::Features;
+use crate::group::{ChildProcess, Features};
 use crate::indicators::BinaryCrateName;
 use crate::output::DynErrResult;
 use core::borrow::Borrow;
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use test_binary::TestBinary;
 
 fn manifest_path_for_subdir<S>(parent_dir: &S, sub_dir: &S) -> PathBuf
@@ -18,7 +18,7 @@ pub fn spawn<'a, S>(
     sub_dir: &S,
     binary_crate: &BinaryCrateName<'a, S>,
     features: &Features<'a, S>,
-) -> DynErrResult<Child>
+) -> DynErrResult<ChildProcess>
 where
     S: Borrow<str> + 'a + ?Sized,
     //S: 'a + ?Sized,

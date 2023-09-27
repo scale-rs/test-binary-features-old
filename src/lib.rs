@@ -9,7 +9,7 @@
 //! Any `B` generic parameter is for [BinaryCrateName]. That's separate from `S` because of
 //! lifetimes and borrowing.
 
-mod group;
+pub mod group;
 mod group_of_sequences_of_groups;
 mod indicators;
 mod output;

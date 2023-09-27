@@ -1,12 +1,12 @@
 use crate::indicators::{BinaryCrateName, GroupEnd, SpawningMode};
-use crate::output::{DynErr, DynErrResult, OptOutput, OutputAndOrError};
+use crate::output::{DynErr, DynErrResult, OptOutput, ProcessOutput};
 use crate::task;
 use core::borrow::Borrow;
 use core::time::Duration;
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::io::{self, Result as IoResult, Write};
-use std::process::{Child, Output};
+use std::process::Child;
 use std::thread;
 
 /// How long to sleep before checking again whether any child process(es) finished.
@@ -14,17 +14,20 @@ const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(10);
 
 /// Result of [Child]'s `id()` method. NOT a (transparent) single item struct, because we don't use
 /// [u32] for anything else here.
-pub type ChildId = u32;
+pub type ChildProcessId = u32;
+
+/// For disambiguation.
+pub type ChildProcess = Child;
 
 pub type ChildInfo = String;
-pub type ChildInfoMeta<M> = (Child, ChildInfo, M);
+pub type ChildInfoMeta<M> = (ChildProcess, ChildInfo, M);
 
 /// Group of active (running) Child processes.
 ///
 /// NOT [std::collections::HashSet], because that makes referencing the items less efficient.
 ///
-/// Keys are results of [Child]'s `id()` method.
-pub type GroupOfChildren<M> = HashMap<ChildId, ChildInfoMeta<M>>;
+/// Keys are results of [ChildProcess]'s `id()` method.
+pub type GroupOfChildren<M> = HashMap<ChildProcessId, ChildInfoMeta<M>>;
 
 pub type Features<'a, S> //where S: ?Sized,
     = Vec<&'a S /* feature */>;
@@ -53,7 +56,7 @@ pub(crate) type GroupExecutionAndStartErrors<M> = (GroupExecution<M>, Vec<DynErr
 /// [crate::indicators::SpawningMode::FinishActive] or [crate::indicators::SpawningMode::StopAll],
 /// depending on the given `until` ([GroupEnd]).
 pub fn start_parallel_tasks<'a, S, M>(
-    mut tasks: ParallelTasks<'a, S, M>,
+    tasks: ParallelTasks<'a, S, M>,
     parent_dir: &'a S,
     until: &'a GroupEnd,
 ) -> GroupExecutionAndStartErrors<M>
@@ -90,7 +93,7 @@ where
 /// Beware: [Ok] of [Some] CAN contain [ExitStatus] _NOT_ being OK!
 pub(crate) fn try_finished_child<M>(
     children: &mut GroupOfChildren<M>,
-) -> DynErrResult<Option<ChildId>> {
+) -> DynErrResult<Option<ChildProcessId>> {
     for (child_id, (child, _, _)) in children.iter_mut() {
         let opt_status_or_err = child.try_wait();
 
@@ -105,7 +108,7 @@ pub(crate) fn try_finished_child<M>(
     Ok(None)
 }
 
-pub(crate) fn print_output(output: &Output) -> IoResult<()> {
+pub(crate) fn print_output(output: &ProcessOutput) -> IoResult<()> {
     // If we have both non-empty stdout and stderr, print stdout first, and stderr second. That way
     // the developer is more likely to notice (and there is less vertical distance to scroll up).
     {

@@ -7,6 +7,7 @@ pub type DynErrResult<T> = Result<T, DynErr>;
 
 /// For disambiguation.
 pub type ProcessOutput = Output;
+
 /// [Output] part mey not be present, if [std::process::Child::wait_with_output] failed.
 pub type ChildOutput<M> = (Option<Output>, ChildInfo, M);
 pub type ChildOutputOption<M> = Option<ChildOutput<M>>;
