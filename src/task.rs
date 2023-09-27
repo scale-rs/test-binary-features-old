@@ -1,3 +1,4 @@
+use crate::group::Features;
 use crate::indicators::BinaryCrateName;
 use crate::output::DynErrResult;
 use core::borrow::Borrow;
@@ -12,16 +13,16 @@ where
     PathBuf::from_iter([parent_dir.borrow(), sub_dir.borrow(), "Cargo.toml"])
 }
 
-pub fn spawn<'s, 'b, S, B>(
+pub fn spawn<'a, S>(
     parent_dir: &S,
     sub_dir: &S,
-    binary_crate: &BinaryCrateName<'b, B>,
-    features: impl IntoIterator<Item = &'s S>,
+    binary_crate: &BinaryCrateName<'a, S>,
+    features: &Features<'a, S>,
 ) -> DynErrResult<Child>
 where
-    S: Borrow<str> + 's + ?Sized,
-    B: 'b + ?Sized,
-    &'b B: Borrow<str>,
+    S: Borrow<str> + 'a + ?Sized,
+    //S: 'a + ?Sized,
+    &'a S: Borrow<str>,
 {
     let manifest_path = manifest_path_for_subdir(parent_dir, sub_dir);
     let binary_crate = binary_crate.borrow();

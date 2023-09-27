@@ -1,5 +1,6 @@
 //#![allow(unused)]
-#![cfg_attr(nightly, feature(implied_bounds))]
+//#![allow(unused_variables)]
+//#![cfg_attr(nightly, feature(implied_bounds))]
 //#![cfg_attr(nightly, feature(lazy_type_alias))]
 //#![cfg_attr(nightly, feature(min_specialization))]
 //! Any `S` generic parameter is for [String]/[str] slice-like type, used for accepting names of

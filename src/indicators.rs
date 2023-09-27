@@ -53,20 +53,6 @@ impl GroupEnd {
             Self::ProcessAll => SpawningMode::ProcessAll,
         }
     }
-
-    /// Return a [SpawningMode] after the first task (process) termination (either successful or
-    /// erroneous) and/or after an error.
-    pub fn same_group_after_output_and_or_error(
-        &self,
-        child_output: &ChildOutputOption,
-        error: &DynErrOption,
-    ) -> SpawningMode {
-        return if output::has_error(child_output, error) {
-            self.mode_after_error_in_same_group()
-        } else {
-            SpawningMode::ProcessAll
-        };
-    }
 }
 
 pub enum SequenceEnd {
@@ -132,9 +118,6 @@ mod test {
             "other_binary"
         );
     }
-
-    #[test]
-    fn same_group_after_output_and_or_error() {}
 
     #[test]
     fn spawning_mode_has_error() {

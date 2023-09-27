@@ -7,7 +7,8 @@ pub type DynErrResult<T> = Result<T, DynErr>;
 
 /// For disambiguation.
 pub type ProcessOutput = Output;
-pub type ChildOutput = (Output, ChildInfo);
+/// [Output] part mey not be present, if [std::process::Child::wait_with_output] failed.
+pub type ChildOutput = (Option<Output>, ChildInfo);
 pub type ChildOutputOption = Option<ChildOutput>;
 pub type DynErrOption = Option<DynErr>;
 
@@ -18,9 +19,10 @@ pub type OutputAndOrError = (ChildOutputOption, DynErrOption);
 /// this could accept one parameter [OutputAndOrError]. But then it would consume it, which upsets
 /// ergonomics.
 pub fn has_error(output_option: &ChildOutputOption, error_option: &DynErrOption) -> bool {
-    error_option.is_some() || {
-        matches!(output_option, Some((out, _)) if !out.status.success() || !out.stderr.is_empty())
-    }
+    error_option.is_some()
+        || {
+            matches!(output_option, Some((Some(out), _)) if !out.status.success() || !out.stderr.is_empty())
+        }
 }
 
 pub type OptOutput = Option<OutputAndOrError>;
