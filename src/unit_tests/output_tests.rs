@@ -1,4 +1,4 @@
-use crate::output;
+use crate::output::{self, ChildOutputOption};
 use std::ffi::OsStr;
 use std::process::{Command, Output, Stdio};
 
@@ -33,14 +33,14 @@ fn has_error() {
     let ok = output_ok();
     let ok_status = ok.status;
     assert!(!output::has_error(
-        &Some((Some(ok), "ok".to_owned())),
+        &Some((Some(ok), "ok".to_owned(), "meta")),
         &None
     ));
 
     let failed = output_failed();
     let failed_status = failed.status;
     assert!(output::has_error(
-        &Some((Some(failed), "failed".to_owned())),
+        &Some((Some(failed), "failed".to_owned(), 12 /*meta*/)),
         &None
     ));
 
@@ -51,6 +51,7 @@ fn has_error() {
             stderr: Vec::with_capacity(0),
         }),
         "ok_outputs_but_failed_status".to_owned(),
+        (), /*meta*/
     ));
     assert!(output::has_error(&ok_outputs_but_failed_status, &None));
 
@@ -61,8 +62,10 @@ fn has_error() {
             stderr: vec![1u8],
         }),
         "failed_outputs_but_ok_status".to_owned(),
+        "meta",
     ));
     assert!(output::has_error(&failed_outputs_but_ok_status, &None));
 
-    assert!(output::has_error(&None, &Some(Box::new(Err {}))));
+    let no_output: ChildOutputOption<()> = None;
+    assert!(output::has_error(&no_output, &Some(Box::new(Err {}))));
 }

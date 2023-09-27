@@ -17,28 +17,29 @@ const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(10);
 pub type ChildId = u32;
 
 pub type ChildInfo = String;
-pub type ChildInfoMeta = (Child, ChildInfo);
+pub type ChildInfoMeta<M> = (Child, ChildInfo, M);
 
 /// Group of active (running) Child processes.
 ///
 /// NOT [std::collections::HashSet], because that makes referencing the items less efficient.
 ///
 /// Keys are results of [Child]'s `id()` method.
-pub type GroupOfChildren = HashMap<ChildId, ChildInfoMeta>;
+pub type GroupOfChildren<M> = HashMap<ChildId, ChildInfoMeta<M>>;
 
 pub type Features<'a, S> //where S: ?Sized,
     = Vec<&'a S /* feature */>;
 
-pub type ParallelTasks<'a, S> = Vec<(
+pub type ParallelTasks<'a, S, M> = Vec<(
     &'a S, /* subdir */
     &'a BinaryCrateName<'a, S>,
     Features<'a, S>,
     ChildInfo,
+    M,
 )>;
 
-pub(crate) type GroupExecution = (GroupOfChildren, SpawningMode);
-pub(crate) type GroupExecutionAndOptOutput = (GroupExecution, OptOutput);
-pub(crate) type GroupExecutionAndStartErrors = (GroupExecution, Vec<DynErr>);
+pub(crate) type GroupExecution<M> = (GroupOfChildren<M>, SpawningMode);
+pub(crate) type GroupExecutionAndOptOutput<M> = (GroupExecution<M>, OptOutput<M>);
+pub(crate) type GroupExecutionAndStartErrors<M> = (GroupExecution<M>, Vec<DynErr>);
 
 /// Start a group of parallel child process(es) - tasks, all under the same `parent_dir`.
 ///
@@ -51,11 +52,11 @@ pub(crate) type GroupExecutionAndStartErrors = (GroupExecution, Vec<DynErr>);
 /// the [crate::indicators::SpawningMode] part of the result tuple is either
 /// [crate::indicators::SpawningMode::FinishActive] or [crate::indicators::SpawningMode::StopAll],
 /// depending on the given `until` ([GroupEnd]).
-pub fn start_parallel_tasks<'a, S>(
-    mut tasks: ParallelTasks<'a, S>,
+pub fn start_parallel_tasks<'a, S, M>(
+    mut tasks: ParallelTasks<'a, S, M>,
     parent_dir: &'a S,
     until: &'a GroupEnd,
-) -> GroupExecutionAndStartErrors
+) -> GroupExecutionAndStartErrors<M>
 //@TODO change the output type to be only a Vec<DynErr>.
 where
     S: Borrow<str> + 'a + ?Sized,
@@ -65,12 +66,12 @@ where
     let mut spawning_mode = SpawningMode::default();
     let mut errors = Vec::with_capacity(0);
 
-    for (sub_dir, binary_crate, features, child_info) in tasks {
+    for (sub_dir, binary_crate, features, child_info, meta) in tasks {
         let child_or_err = task::spawn(parent_dir, sub_dir, binary_crate, &features);
 
         match child_or_err {
             Ok(child) => {
-                children.insert(child.id(), (child, child_info));
+                children.insert(child.id(), (child, child_info, meta));
             }
             Err(err) => {
                 spawning_mode = until.mode_after_error_in_same_group();
@@ -87,8 +88,10 @@ where
 /// The [ChildId] is child process ID of the finished process.
 ///
 /// Beware: [Ok] of [Some] CAN contain [ExitStatus] _NOT_ being OK!
-pub(crate) fn try_finished_child(children: &mut GroupOfChildren) -> DynErrResult<Option<ChildId>> {
-    for (child_id, (child, _)) in children.iter_mut() {
+pub(crate) fn try_finished_child<M>(
+    children: &mut GroupOfChildren<M>,
+) -> DynErrResult<Option<ChildId>> {
+    for (child_id, (child, _, _)) in children.iter_mut() {
         let opt_status_or_err = child.try_wait();
 
         match opt_status_or_err {
@@ -124,13 +127,13 @@ pub(crate) fn print_output(output: &Output) -> IoResult<()> {
 /// Return [Some] if any child has finished; return [None] when all children have finished. This
 /// does NOT modify [SpawningMode] part of the result [GroupExecutionAndOptOutput].
 #[must_use]
-pub fn collect_finished_child(
-    (mut children, spawning_mode): GroupExecution,
-) -> Option<GroupExecutionAndOptOutput> {
+pub fn collect_finished_child<M>(
+    (mut children, spawning_mode): GroupExecution<M>,
+) -> Option<GroupExecutionAndOptOutput<M>> {
     let finished_result = try_finished_child(&mut children);
     match finished_result {
         Ok(Some(child_id)) => {
-            let (child, child_info) = children.remove(&child_id).unwrap();
+            let (child, child_info, meta) = children.remove(&child_id).unwrap();
             let (child_output, err) = match child.wait_with_output() {
                 Ok(child_output) => (Some(child_output), None),
                 Err(err) => (
@@ -143,7 +146,7 @@ pub fn collect_finished_child(
             };
             Some((
                 (children, spawning_mode),
-                Some((Some((child_output, child_info)), err)),
+                Some((Some((child_output, child_info, meta)), err)),
             ))
         }
         Ok(None) => {
@@ -158,8 +161,8 @@ pub fn collect_finished_child(
 }
 
 #[must_use]
-pub fn life_cycle_step(
-    (mut _children, mut _spawning_mode): GroupExecution,
+pub fn life_cycle_step<M>(
+    (mut _children, mut _spawning_mode): GroupExecution<M>,
     _until: &GroupEnd,
 ) -> DynErrResult<()> {
     thread::sleep(SLEEP_BETWEEN_CHECKING_CHILDREN);

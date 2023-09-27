@@ -86,9 +86,9 @@ impl Default for SpawningMode {
     }
 }
 impl SpawningMode {
-    pub fn after_output_and_or_error(
+    pub fn after_output_and_or_error<M>(
         self,
-        output: &ChildOutputOption,
+        output: &ChildOutputOption<M>,
         error: &DynErrOption,
         group_until: &GroupEnd,
     ) -> Self {
