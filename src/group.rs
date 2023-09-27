@@ -41,7 +41,7 @@ pub type ParallelTasks<'a, S, M> = Vec<(
 )>;
 
 pub(crate) type GroupExecution<M> = (GroupOfChildren<M>, SpawningMode);
-pub(crate) type GroupExecutionAndOptOutput<M> = (GroupExecution<M>, OptOutput<M>);
+pub(crate) type GroupOfChildrenAndOptOutput<M> = (GroupOfChildren<M>, OptOutput<M>);
 pub(crate) type GroupExecutionAndStartErrors<M> = (GroupExecution<M>, Vec<DynErr>);
 
 /// Start a group of parallel child process(es) - tasks, all under the same `parent_dir`.
@@ -131,8 +131,8 @@ pub(crate) fn print_output(output: &ProcessOutput) -> IoResult<()> {
 /// does NOT modify [SpawningMode] part of the result [GroupExecutionAndOptOutput].
 #[must_use]
 pub fn collect_finished_child<M>(
-    (mut children, spawning_mode): GroupExecution<M>,
-) -> Option<GroupExecutionAndOptOutput<M>> {
+    mut children: GroupOfChildren<M>,
+) -> Option<GroupOfChildrenAndOptOutput<M>> {
     let finished_result = try_finished_child(&mut children);
     match finished_result {
         Ok(Some(child_id)) => {
@@ -148,7 +148,7 @@ pub fn collect_finished_child<M>(
                 ),
             };
             Some((
-                (children, spawning_mode),
+                children,
                 Some((Some((child_output, child_info, meta)), err)),
             ))
         }
@@ -156,10 +156,10 @@ pub fn collect_finished_child<M>(
             if children.is_empty() {
                 None
             } else {
-                Some(((children, spawning_mode), None))
+                Some((children, None))
             }
         }
-        Err(err) => Some(((children, spawning_mode), Some((None, Some(err))))),
+        Err(err) => Some((children, Some((None, Some(err))))),
     }
 }
 
