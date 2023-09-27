@@ -54,8 +54,8 @@ impl GroupEnd {
         }
     }
 
-    /// Return a new [SpawningMode] after the first task (process) termination (either successful or errornous) and/or
-    /// after an error.
+    /// Return a [SpawningMode] after the first task (process) termination (either successful or
+    /// erroneous) and/or after an error.
     pub fn same_group_after_output_and_or_error(
         &self,
         child_output: &ChildOutputOption,

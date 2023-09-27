@@ -36,41 +36,6 @@ pub type ParallelTasksIterDyn<'a, S> = dyn Iterator<
             ChildInfo,
         ),
     > + 'a;
-pub type ParallelTasksIterDynBox<'a, S> = Box<ParallelTasksIterDyn<'a, S>>;
-
-/// This does return a generic (`impl`) iterator itself. Then you can store it, and pass a (mutable)
-/// reference to it when calling [start_parallel_tasks].
-pub fn parallel_tasks_from_generic<'a, S, FEATURES, TASKS>(
-    tasks: TASKS,
-) -> impl Iterator<
-    Item = (
-        &'a S, /* subdir */
-        &'a BinaryCrateName<'a, S>,
-        FeaturesIterDynBox<'a, S>,
-        ChildInfo,
-    ),
-> + 'a
-where
-    S: Borrow<str> + 'a + ?Sized, // for FeatureSet
-    &'a S: Borrow<str>,           // for BinaryCrateName
-    FEATURES: Iterator<Item = &'a S> + 'a,
-    TASKS: Iterator<
-            Item = (
-                &'a S, /* sub_dir */
-                &'a BinaryCrateName<'a, S>,
-                FEATURES,
-                ChildInfo,
-            ),
-        > + 'a,
-{
-    tasks.map(|(sub_dir, binary_crate_name, features, child_info)| {
-        // The following fails:
-        //
-        // (sub_dir, binary_crate_name, Box::new(features))
-        let features = Box::new(features) as FeaturesIterDynBox<'a, S>;
-        (sub_dir, binary_crate_name, features, child_info)
-    })
-}
 
 pub(crate) type GroupExecution = (GroupOfChildren, SpawningMode);
 pub(crate) type GroupExecutionAndOptOutput = (GroupExecution, OptOutput);
