@@ -13,9 +13,10 @@ use std::thread;
 /// How long to sleep before checking again whether any child process(es) finished.
 const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(10);
 
-/// Result of [Child]'s `id()` method. NOT a (transparent) single item struct, because we don't use
-/// [u32] for anything else here.
-pub type ChildProcessId = u32;
+/// Result of [Child]'s `id()` method, wrapped.
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[repr(transparent)]
+pub struct ChildProcessId(pub u32);
 
 /// For disambiguation.
 pub type ChildProcess = Child;
@@ -47,7 +48,7 @@ pub type ChildInfoMetaTuple<M> = (ChildProcess, ChildInfo, M);
 /// (only) positional/anonymous field, especially so they destructure the underlying tuple into its
 /// fields (and give them names as local variables).
 #[repr(transparent)]
-pub struct ChildInfoMeta<M>(ChildInfoMetaTuple<M>);
+pub struct ChildInfoMeta<M>(pub ChildInfoMetaTuple<M>);
 impl<M> ChildInfoMeta<M> {
     pub fn new(process: ChildProcess, info: ChildInfo, meta: M) -> Self {
         Self((process, info, meta))
@@ -177,7 +178,10 @@ where
 
         match child_or_err {
             Ok(child) => {
-                children.insert(child.id(), ChildInfoMeta((child, child_info, meta)));
+                children.insert(
+                    ChildProcessId(child.id()),
+                    ChildInfoMeta((child, child_info, meta)),
+                );
             }
             Err(err) => {
                 spawning_mode = until.mode_after_error_in_same_group();
