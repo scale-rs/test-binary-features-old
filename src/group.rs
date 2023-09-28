@@ -168,7 +168,20 @@ pub fn life_cycle_step<M>(
     (mut _children, mut _spawning_mode): GroupExecution<M>,
     _until: &GroupEnd,
 ) -> DynErrResult<()> {
+    /*match collect_finished_child(children) {
+
+    }*/
     thread::sleep(SLEEP_BETWEEN_CHECKING_CHILDREN);
     // @TODO kill
     panic!()
+}
+
+#[must_use]
+pub fn life_cycle_loop<M>(
+    (mut _children, mut _spawning_mode): GroupExecution<M>,
+    _until: &GroupEnd,
+) -> DynErrResult<()> {
+    loop {
+        panic!();
+    }
 }
