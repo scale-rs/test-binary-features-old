@@ -2,6 +2,7 @@ use crate::indicators::{BinaryCrateName, GroupEnd, SpawningMode};
 use crate::output::{DynErr, DynErrResult, OptOutput, ProcessOutput};
 use crate::task;
 use core::borrow::Borrow;
+use core::ops::{Deref, DerefMut};
 use core::time::Duration;
 use std::collections::HashMap;
 use std::error::Error as StdError;
@@ -20,7 +21,109 @@ pub type ChildProcessId = u32;
 pub type ChildProcess = Child;
 
 pub type ChildInfo = String;
-pub type ChildInfoMeta<M> = (ChildProcess, ChildInfo, M);
+
+/// Good: Brevity of positional constructor.
+///
+/// Bad: Missing clarity of accessing the fields by names.
+pub type ChildInfoMetaTuple<M> = (ChildProcess, ChildInfo, M);
+
+/// Having a struct with (one) named field (for example, `its`), instead of a (one field) tuple
+/// struct, could make some code "nicer".
+/// ```rust
+/// #[repr(transparent)]
+/// pub struct ChildInfoMeta<M> {
+///     /* Not called `it`, so as not to confuse it with iterators.*/
+///     pub its: ChildInfoMetaTuple<M>,
+/// }
+/// ```
+/// However, that would be either useful mostly for
+/// - accessing the (only) field, but that we can also dereference with asterisk (through [Deref]
+///   and [DerefMut]). Or
+/// - for accessing the anonymous/positional field(s) of the underlying tuple. But for that we have
+///   our named accessor methods, so we don't need to access it through/by specifying the wrapped
+///   tuple itself. So we don't really need any of that.
+///
+/// Instead, the consumers benefit more from easily destructuring our wrappers struct into its
+/// (only) positional/anonymous field, especially so they destructure the underlying tuple into its
+/// fields (and give them names as local variables).
+#[repr(transparent)]
+pub struct ChildInfoMeta<M>(ChildInfoMetaTuple<M>);
+impl<M> ChildInfoMeta<M> {
+    pub fn new(process: ChildProcess, info: ChildInfo, meta: M) -> Self {
+        Self((process, info, meta))
+    }
+
+    pub fn child(&self) -> &ChildProcess {
+        &self.0 .0
+    }
+    pub fn info(&self) -> &ChildInfo {
+        &self.0 .1
+    }
+    /// Only for non-[Copy], or if [Copy] but not primitive.
+    ///
+    /// If [Copy] and primitive, then this function doesn't return a reference, but the field value.
+    pub fn meta(&self) -> &M {
+        &self.0 .2
+    }
+
+    pub fn meta_mut(&mut self) -> &mut M {
+        &mut self.0 .2
+    }
+}
+
+/// Only for [Copy], and only if NOT primitive.
+///
+/// Rename to `meta_copy()` for non-primitive types, so that its cost would be evident everywhere
+/// it's used.
+impl<M> ChildInfoMeta<M>
+where
+    M: Copy,
+{
+    pub fn meta_copy(&self) -> M {
+        self.0 .2
+    }
+}
+
+// @TODO From/Into
+
+/// Implementing [Deref] and [DerefMut] doesn't improve ergonomics for accessing the tuple's field
+/// by numeric index. For that we have to put the dereferencing asterisk and the struct instance
+/// into parenthesis, e.g.
+/// ```rust
+/// let wrap: ChildInfoMetaWrap = ...;
+/// meta = (*wrap).2;
+/// ```
+/// So we may just as well use
+/// ```rust
+/// let wrap: ChildInfoMetaWrap = ...;
+/// meta = wrap.0.2;
+/// ```
+/// - a little easier to type and read. However, we really want to use our named accessor methods.
+///
+/// But dereferencing with asterisk is ergonomic when we need to cast the struct back to the tuple
+/// type.
+impl<M> Deref for ChildInfoMeta<M> {
+    type Target = ChildInfoMetaTuple<M>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<M> DerefMut for ChildInfoMeta<M> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+fn _try_use_tuple(tuple: ChildInfoMetaTuple<i32>) {
+    let mut struc = ChildInfoMeta(tuple);
+
+    let _meta_mut = struc.meta_mut();
+    *struc.meta_mut() = 1;
+
+    let _meta = (*struc).2;
+}
 
 /// Group of active (running) Child processes.
 ///
@@ -74,7 +177,7 @@ where
 
         match child_or_err {
             Ok(child) => {
-                children.insert(child.id(), (child, child_info, meta));
+                children.insert(child.id(), ChildInfoMeta((child, child_info, meta)));
             }
             Err(err) => {
                 spawning_mode = until.mode_after_error_in_same_group();
@@ -94,7 +197,7 @@ where
 pub(crate) fn try_finished_child<M>(
     children: &mut GroupOfChildren<M>,
 ) -> DynErrResult<Option<ChildProcessId>> {
-    for (child_id, (child, _, _)) in children.iter_mut() {
+    for (child_id, ChildInfoMeta((child, _, _))) in children.iter_mut() {
         let opt_status_or_err = child.try_wait();
 
         match opt_status_or_err {
@@ -136,7 +239,7 @@ pub fn collect_finished_child<M>(
     let finished_result = try_finished_child(&mut children);
     match finished_result {
         Ok(Some(child_id)) => {
-            let (child, child_info, meta) = children.remove(&child_id).unwrap();
+            let ChildInfoMeta((child, child_info, meta)) = children.remove(&child_id).unwrap();
             let (child_output, err) = match child.wait_with_output() {
                 Ok(child_output) => (Some(child_output), None),
                 Err(err) => (
