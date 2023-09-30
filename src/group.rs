@@ -4,6 +4,7 @@ use crate::task;
 use core::borrow::Borrow;
 use core::ops::{Deref, DerefMut};
 use core::time::Duration;
+use phantom_newtype::Id;
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::io::{self, Result as IoResult, Write};
@@ -13,20 +14,15 @@ use std::thread;
 /// How long to sleep before checking again whether any child process(es) finished.
 const SLEEP_BETWEEN_CHECKING_CHILDREN: Duration = Duration::from_millis(10);
 
-/// Result of [Child]'s `id()` method, wrapped.
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-#[repr(transparent)]
-pub struct ChildProcessId(pub u32);
-
 /// For disambiguation.
 pub type ChildProcess = Child;
 
-pub type ChildInfo = String;
+/// Result of [Child]'s `id()` method, wrapped.
+//#[repr(transparent)]
+//pub sttrans ChildProcessId(pub u32);
+pub type ChildProcessId = Id<ChildProcess, u32>;
 
-/// Good: Brevity of positional constructor.
-///
-/// Bad: Missing clarity of accessing the fields by names.
-pub type ChildInfoMetaTuple<M> = (ChildProcess, ChildInfo, M);
+pub type ChildInfo = String;
 
 /// Having a struct with (one) named field (for example, `its`), instead of a (one field) tuple
 /// struct, could make some code "nicer".
@@ -37,38 +33,48 @@ pub type ChildInfoMetaTuple<M> = (ChildProcess, ChildInfo, M);
 ///     pub its: ChildInfoMetaTuple<M>,
 /// }
 /// ```
-/// However, that would be either useful mostly for
+/// However, that would be useful mostly for either
 /// - accessing the (only) field, but that we can also dereference with asterisk (through [Deref]
 ///   and [DerefMut]). Or
-/// - for accessing the anonymous/positional field(s) of the underlying tuple. But for that we have
-///   our named accessor methods, so we don't need to access it through/by specifying the wrapped
-///   tuple itself. So we don't really need any of that.
+/// - accessing the anonymous/positional field(s) of the underlying tuple. But for that we have our
+///   named accessor methods, so we don't need to access it through/by specifying the wrapped tuple
+///   itself. So we don't need any of that much.
 ///
 /// Instead, the consumers benefit more from easily destructuring our wrappers struct into its
 /// (only) positional/anonymous field, especially so they destructure the underlying tuple into its
 /// fields (and give them names as local variables).
-#[repr(transparent)]
-pub struct ChildInfoMeta<M>(pub ChildInfoMetaTuple<M>);
+///
+/// Why anonymous tuples (with nameless fields)? Brevity of positional constructor. And pattern matching.
+pub struct ChildInfoMeta<M>(ChildProcess, ChildInfo, M);
 impl<M> ChildInfoMeta<M> {
-    pub fn new(process: ChildProcess, info: ChildInfo, meta: M) -> Self {
+    /// Useful if we don't want to publish the wrapped field.
+    /*pub fn new(process: ChildProcess, info: ChildInfo, meta: M) -> Self {
         Self((process, info, meta))
-    }
+    }*/
 
     pub fn child(&self) -> &ChildProcess {
-        &self.0 .0
+        &self.0
     }
     pub fn info(&self) -> &ChildInfo {
-        &self.0 .1
+        &self.1
     }
-    /// Only for non-[Copy], or if [Copy] but not primitive.
+    /// Only for non-[Copy], or if [Copy] but deemed large.
     ///
     /// If [Copy] and primitive, then this function doesn't return a reference, but the field value.
     pub fn meta(&self) -> &M {
-        &self.0 .2
+        &self.2
     }
 
+    // For [Copy] but deemed large.
+    //
+    // pub fn meta_copy(&self) -> M
+    //
+    // Suggest not to have `meta_ref(&self) ->&M for a reference to (deemed large) M. Why? Because
+    // sharing & accessing by references is preferred to copying the data (wherever possible). So we
+    // make this preferred method name a short one.
+
     pub fn meta_mut(&mut self) -> &mut M {
-        &mut self.0 .2
+        &mut self.2
     }
 }
 
@@ -81,7 +87,7 @@ where
     M: Copy,
 {
     pub fn meta_copy(&self) -> M {
-        self.0 .2
+        self.2
     }
 }
 
@@ -103,28 +109,6 @@ where
 ///
 /// But dereferencing with asterisk is ergonomic when we need to cast the struct back to the tuple
 /// type.
-impl<M> Deref for ChildInfoMeta<M> {
-    type Target = ChildInfoMetaTuple<M>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<M> DerefMut for ChildInfoMeta<M> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-fn _try_use_tuple(tuple: ChildInfoMetaTuple<i32>) {
-    let mut struc = ChildInfoMeta(tuple);
-
-    let _meta_mut = struc.meta_mut();
-    *struc.meta_mut() = 1;
-
-    let _meta = (*struc).2;
-}
 
 /// Group of active (running) Child processes.
 ///
@@ -178,10 +162,7 @@ where
 
         match child_or_err {
             Ok(child) => {
-                children.insert(
-                    ChildProcessId(child.id()),
-                    ChildInfoMeta((child, child_info, meta)),
-                );
+                children.insert(child.id().into(), ChildInfoMeta(child, child_info, meta));
             }
             Err(err) => {
                 spawning_mode = until.mode_after_error_in_same_group();
@@ -197,11 +178,11 @@ where
 ///
 /// The [ChildId] is child process ID of the finished process.
 ///
-/// Beware: [Ok] of [Some] CAN contain [ExitStatus] _NOT_ being OK!
+/// Beware: [Ok] of [Some] actually CAN contain [ExitStatus] _NOT_ being OK!
 pub(crate) fn try_finished_child<M>(
     children: &mut GroupOfChildren<M>,
 ) -> DynErrResult<Option<ChildProcessId>> {
-    for (child_id, ChildInfoMeta((child, _, _))) in children.iter_mut() {
+    for (child_id, ChildInfoMeta(child, _, _)) in children.iter_mut() {
         let opt_status_or_err = child.try_wait();
 
         match opt_status_or_err {
@@ -243,7 +224,7 @@ pub fn collect_finished_child<M>(
     let finished_result = try_finished_child(&mut children);
     match finished_result {
         Ok(Some(child_id)) => {
-            let ChildInfoMeta((child, child_info, meta)) = children.remove(&child_id).unwrap();
+            let ChildInfoMeta(child, child_info, meta) = children.remove(&child_id).unwrap();
             let (child_output, err) = match child.wait_with_output() {
                 Ok(child_output) => (Some(child_output), None),
                 Err(err) => (
